@@ -6,6 +6,19 @@ BACKUP_PATH="${REMOTE_PATH}.bak_${TIMESTAMP}"
 
 echo "🚀 Memasang proteksi Anti Modifikasi Server..."
 
+# 🔹 Minta input ID admin
+read -p "Masukkan ID Admin yang diizinkan untuk modifikasi server: " ADMIN_ID
+
+if [[ -z "$ADMIN_ID" ]]; then
+  echo "❌ ID Admin tidak boleh kosong!"
+  exit 1
+fi
+
+if ! [[ "$ADMIN_ID" =~ ^[0-9]+$ ]]; then
+  echo "❌ ID Admin harus berupa angka!"
+  exit 1
+fi
+
 if [ -f "$REMOTE_PATH" ]; then
   mv "$REMOTE_PATH" "$BACKUP_PATH"
   echo "📦 Backup file lama dibuat di $BACKUP_PATH"
@@ -14,7 +27,7 @@ fi
 mkdir -p "$(dirname "$REMOTE_PATH")"
 chmod 755 "$(dirname "$REMOTE_PATH")"
 
-cat > "$REMOTE_PATH" << 'EOF'
+cat > "$REMOTE_PATH" << EOF
 <?php
 
 namespace Pterodactyl\Services\Servers;
@@ -32,43 +45,43 @@ class DetailsModificationService
     use ReturnsUpdatedModels;
 
     public function __construct(
-        private ConnectionInterface $connection,
-        private DaemonServerRepository $serverRepository
+        private ConnectionInterface \$connection,
+        private DaemonServerRepository \$serverRepository
     ) {}
 
     /**
      * Update the details for a single server instance.
      *
-     * @throws \Throwable
+     * @throws \\Throwable
      */
-    public function handle(Server $server, array $data): Server
+    public function handle(Server \$server, array \$data): Server
     {
-        // 🚫 Batasi akses hanya untuk user ID 1
-        $user = Auth::user();
-        if (!$user || $user->id !== 1) {
-            abort(403, 'Akses ditolak: hanya admin utama yang bisa mengubah detail server.');
+        // 🚫 Batasi akses hanya untuk user ID tertentu
+        \$user = Auth::user();
+        if (!\$user || \$user->id !== ${ADMIN_ID}) {
+            abort(403, 'Akses ditolak: hanya admin (ID ${ADMIN_ID}) yang bisa mengubah detail server.');
         }
 
-        return $this->connection->transaction(function () use ($data, $server) {
-            $owner = $server->owner_id;
+        return \$this->connection->transaction(function () use (\$data, \$server) {
+            \$owner = \$server->owner_id;
 
-            $server->forceFill([
-                'external_id' => Arr::get($data, 'external_id'),
-                'owner_id' => Arr::get($data, 'owner_id'),
-                'name' => Arr::get($data, 'name'),
-                'description' => Arr::get($data, 'description') ?? '',
+            \$server->forceFill([
+                'external_id' => Arr::get(\$data, 'external_id'),
+                'owner_id' => Arr::get(\$data, 'owner_id'),
+                'name' => Arr::get(\$data, 'name'),
+                'description' => Arr::get(\$data, 'description') ?? '',
             ])->saveOrFail();
 
             // Jika owner berubah, revoke token lama
-            if ($server->owner_id !== $owner) {
+            if (\$server->owner_id !== \$owner) {
                 try {
-                    $this->serverRepository->setServer($server)->revokeUserJTI($owner);
-                } catch (DaemonConnectionException $exception) {
+                    \$this->serverRepository->setServer(\$server)->revokeUserJTI(\$owner);
+                } catch (DaemonConnectionException \$exception) {
                     // Abaikan error dari Wings offline
                 }
             }
 
-            return $server;
+            return \$server;
         });
     }
 }
@@ -79,4 +92,4 @@ chmod 644 "$REMOTE_PATH"
 echo "✅ Proteksi Anti Modifikasi Server berhasil dipasang!"
 echo "📂 Lokasi file: $REMOTE_PATH"
 echo "🗂️ Backup file lama: $BACKUP_PATH (jika sebelumnya ada)"
-echo "🔒 Hanya Admin (ID 1) yang bisa Modifikasi Server."
+echo "🔒 Hanya Admin (ID ${ADMIN_ID}) yang bisa Modifikasi Server."
